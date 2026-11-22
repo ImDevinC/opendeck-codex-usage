@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Codex Usage</title>
+	<style>
+		:root { color-scheme: dark; color: CanvasText; }
+		body { margin: 16px; font: 14px system-ui, sans-serif; }
+		section { display: grid; gap: 8px; margin-bottom: 16px; }
+		button, select { font: inherit; padding: 5px; }
+		#status { margin: 0; }
+	</style>
+</head>
+<body>
+	<section aria-label="ChatGPT connection">
+		<button id="connect" disabled>Sign in with ChatGPT</button>
+		<button id="disconnect" disabled>Disconnect</button>
+		<p id="status" role="status">Connecting to OpenDeck…</p>
+	</section>
+	<section aria-label="Key settings">
+		<label for="window">Quota window</label>
+		<select id="window" disabled><option value="">First available</option></select>
+		<label><input type="checkbox" id="showPercent" disabled checked> Show percentage</label>
+	</section>
+	<script>
+		const byId = id => document.getElementById(id);
+		const windowPicker = byId("window");
+		const showPercent = byId("showPercent");
+		let websocket, context, action;
+		let settings = {};
+		let windows = [];
+
+		function send(event, payload) {
+			if (websocket?.readyState === WebSocket.OPEN) {
+				websocket.send(JSON.stringify({event, action, context, payload}));
+			}
+		}
+
+		function label(seconds) {
+			for (const [unit, suffix] of [[86400, "d"], [3600, "h"], [60, "m"]]) {
+				if (seconds % unit === 0) return `${seconds / unit}${suffix}`;
+			}
+			return `${seconds}s`;
+		}
+
+		function renderSettings() {
+			windowPicker.replaceChildren(new Option("First available", ""));
+			for (const seconds of new Set(windows)) {
+				windowPicker.add(new Option(label(seconds), seconds));
+			}
+			if (settings.window != null && !windows.includes(settings.window)) {
+				windowPicker.add(new Option(`${label(settings.window)} (unavailable)`, settings.window));
+			}
+			windowPicker.value = settings.window ?? "";
+			showPercent.checked = settings.show_percent !== false;
+		}
+
+		function update() {
+			settings = {
+				window: windowPicker.value === "" ? null : Number(windowPicker.value),
+				show_percent: showPercent.checked,
+			};
+			send("setSettings", settings);
+		}
+
+		function connectOpenActionSocket(port, uuid, registerEvent, _info, rawAction) {
+			const event = JSON.parse(rawAction);
+			({action, context} = event);
+			settings = event.payload?.settings ?? {};
+			renderSettings();
+			websocket = new WebSocket(`ws://localhost:${port}`);
+			websocket.onopen = () => {
+				websocket.send(JSON.stringify({event: registerEvent, uuid}));
+				windowPicker.disabled = showPercent.disabled = false;
+				send("sendToPlugin", {command: "status"});
+			};
+			websocket.onmessage = message => {
+				const {event, payload} = JSON.parse(message.data);
+				if (event === "didReceiveSettings") {
+					settings = payload.settings ?? {};
+				} else if (event === "sendToPropertyInspector") {
+					windows = payload.windows;
+					byId("status").textContent = payload.status;
+					byId("connect").textContent = payload.connected ? "Reconnect to ChatGPT" : "Sign in with ChatGPT";
+					byId("connect").disabled = payload.connecting;
+					byId("disconnect").disabled = payload.connecting || !payload.connected;
+				} else {
+					return;
+				}
+				renderSettings();
+			};
+			websocket.onclose = () => {
+				for (const id of ["connect", "disconnect", "window", "showPercent"]) byId(id).disabled = true;
+				byId("status").textContent = "Disconnected from OpenDeck.";
+			};
+		}
+
+		const connectElgatoStreamDeckSocket = connectOpenActionSocket;
+		windowPicker.onchange = showPercent.onchange = update;
+		byId("connect").onclick = () => send("sendToPlugin", {command: "connect"});
+		byId("disconnect").onclick = () => send("sendToPlugin", {command: "disconnect"});
+	</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+	"Name": "Codex Usage",
+	"Author": "ImDevinC",
+	"Version": "0.1.0",
+	"Category": "Codex",
+	"Icon": "icon",
+	"CategoryIcon": "icon",
+	"OS": [{ "Platform": "windows" }, { "Platform": "mac" }, { "Platform": "linux" }],
+	"CodePaths": {
+		"x86_64-pc-windows-msvc": "oacodex-usage-x86_64-pc-windows-msvc.exe",
+		"x86_64-apple-darwin": "oacodex-usage-x86_64-apple-darwin",
+		"aarch64-apple-darwin": "oacodex-usage-aarch64-apple-darwin",
+		"x86_64-unknown-linux-gnu": "oacodex-usage-x86_64-unknown-linux-gnu",
+		"aarch64-unknown-linux-gnu": "oacodex-usage-aarch64-unknown-linux-gnu"
+	},
+	"CodePathWin": "oacodex-usage-x86_64-pc-windows-msvc.exe",
+	"CodePathMac": "oacodex-usage-x86_64-apple-darwin",
+	"CodePathLin": "oacodex-usage-x86_64-unknown-linux-gnu",
+	"PropertyInspectorPath": "pi.html",
+	"Actions": [{
+		"UUID": "com.imdevinc.codexusage.usage",
+		"Name": "Usage",
+		"Icon": "icon",
+		"Tooltip": "Shows your ChatGPT subscription's Codex quota",
+		"Controllers": ["Keypad"],
+		"States": [{ "Image": "icon", "Title": "Usage", "ShowTitle": false }]
+	}]
+}

@@ -1,0 +1,26 @@
+# Rust build output
+/target/
+
+# OpenDeck packages
+/com.imdevinc.codexusage.sdPlugin/
+/com.imdevinc.codexusage.zip
+
+# Python probe artifacts
+__pycache__/
+*.py[cod]
+/.venv/
+/.pytest_cache/
+/.ruff_cache/
+/.coverage
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
