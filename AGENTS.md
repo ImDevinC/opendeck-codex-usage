@@ -17,6 +17,9 @@ browser cookies, or a helper application.
 - `assets/`: manifest, property inspector, and icon. The bundle ID is
   `com.imdevinc.codexusage`. Keep the manifest and Cargo versions in sync.
 - `probe.py`: optional diagnostic, not part of the plugin bundle.
+- `.github/workflows/`: shared PR label validation and a five-target release
+  build. Keep the manifest binary names in sync with the build matrix. The
+  release commits the new version in `Cargo.toml`, `Cargo.lock`, and the manifest.
 
 Run `cargo test --locked`, `cargo clippy --locked --all-targets -- -D warnings`,
 and `sh package.sh` after relevant changes. Update the README for user-facing

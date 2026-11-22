@@ -45,6 +45,16 @@ account ID in the OS credential store, not in OpenDeck settings. **Disconnect**
 removes the local entry. It does not revoke a server-side session. The plugin
 does not read browser cookies or other applications' credentials.
 
+## Releases
+
+Label each pull request `major`, `minor`, or `patch` to publish a release after
+merge to `main`. Use `chore` or `documentation` to skip a release. The release
+includes one `com.imdevinc.codexusage.zip` with all five supported binaries.
+
+Before the first release, add the `major`, `minor`, `patch`, and `chore` labels
+to the repository and tag the current version as `v0.1.0`. This gives the
+release workflow the correct starting version.
+
 ## Development
 
 ```sh

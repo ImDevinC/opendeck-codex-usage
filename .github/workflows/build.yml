@@ -1,0 +1,169 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+env:
+  BUNDLE: com.imdevinc.codexusage.sdPlugin
+  ARCHIVE: com.imdevinc.codexusage.zip
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
+      release-notes: ${{ steps.semver.outputs.release-notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and tag
+        id: semver
+        uses: jefflinse/pr-semver-bump@v1.7.1
+        with:
+          mode: bump
+          repo-token: ${{ github.token }}
+          minor-label: minor
+          major-label: major
+          patch-label: patch
+          noop-labels: |
+            chore
+            documentation
+          with-v: true
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: bump
+    if: needs.bump.outputs.version != ''
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            extension: .exe
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            extension: ''
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            extension: ''
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            extension: ''
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+            extension: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Build and rename binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          cargo build --locked --release --target "$TARGET"
+          mv "target/$TARGET/release/oacodex-usage$EXTENSION" "oacodex-usage-$TARGET$EXTENSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oacodex-usage-${{ matrix.target }}
+          path: oacodex-usage-${{ matrix.target }}${{ matrix.extension }}
+          compression-level: 0
+          if-no-files-found: error
+
+  package:
+    name: Package and release
+    needs: [bump, build]
+    if: needs.bump.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+          pattern: oacodex-usage-*
+          merge-multiple: true
+
+      - name: Set release version
+        id: version
+        env:
+          VERSION: ${{ needs.bump.outputs.version }}
+        run: |
+          VERSION="${VERSION#[vV]}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          sed -i '/^name = "oacodex-usage"$/{n;s/^version = .*/version = "'"$VERSION"'"/;}' Cargo.lock
+          sed -i "s/\"Version\": \".*\"/\"Version\": \"$VERSION\"/" assets/manifest.json
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Assemble and verify plugin bundle
+        shell: bash
+        run: |
+          mkdir -p "$BUNDLE"
+          cp assets/manifest.json assets/pi.html assets/icon.svg "$BUNDLE/"
+          jq -r '.CodePaths[]' "$BUNDLE/manifest.json" | while IFS= read -r binary; do
+            install -m 755 "bin/$binary" "$BUNDLE/$binary"
+          done
+          zip -rq "$ARCHIVE" "$BUNDLE"
+          unzip -tq "$ARCHIVE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: com.imdevinc.codexusage.zip
+          path: com.imdevinc.codexusage.zip
+          if-no-files-found: error
+
+      - name: Commit version and update tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add Cargo.toml Cargo.lock assets/manifest.json
+            git commit -m "Release $TAG"
+          fi
+          previous_tag=$(git rev-parse "refs/tags/$TAG")
+          git tag -fa "$TAG" -m "$TAG"
+          git push --atomic --force-with-lease="refs/tags/$TAG:$previous_tag" origin HEAD:main "refs/tags/$TAG"
+
+      - name: Create GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          name: ${{ steps.version.outputs.tag }}
+          tag: ${{ steps.version.outputs.tag }}
+          body: ${{ needs.bump.outputs.release-notes }}
+          artifacts: com.imdevinc.codexusage.zip
+          artifactErrorsFailBuild: true
